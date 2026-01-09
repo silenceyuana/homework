@@ -1,0 +1,104 @@
+:root {
+    --primary: #6366f1;
+    --accent: #ec4899;
+    --bg-gradient: radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+                   radial-gradient(at 100% 100%, rgba(236, 72, 153, 0.15) 0px, transparent 50%);
+    --glass: rgba(255, 255, 255, 0.7);
+    --border: rgba(255, 255, 255, 0.6);
+    --text: #1f2937;
+}
+
+body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--text);
+    /* 背景：遮罩 + 后端图片代理（统一使用 shorthand，避免重复声明） */
+    background: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.2)), url('/api/bing-bg') center/cover no-repeat fixed;
+}
+
+/* 移动端适配优化 */
+@media (max-width: 768px) {
+    body {
+        /* 在手机上 background-attachment: fixed 有时会导致性能问题或显示异常，
+           部分浏览器不支持，这里改为 scroll */
+        background-attachment: scroll; 
+        
+        /* 手机端可能需要更深的遮罩，因为手机屏幕小，文字对比度要求更高 */
+        background: 
+            linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.3)), 
+            url('/api/bing-bg') center/cover no-repeat scroll;
+    }
+}
+
+.container { width: 100%; max-width: 900px; padding: 20px; }
+
+.glass-card {
+    background:  rgba(255, 255, 255, 0.65);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    padding: 40px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+    transition: transform 0.3s;
+}
+
+h1, h2 {
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+input, button {
+    width: 100%;
+    padding: 14px;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    margin-bottom: 15px;
+    font-size: 1rem;
+    outline: none;
+}
+
+input { background: rgba(255,255,255,0.6); transition: 0.3s; }
+input:focus { background: #fff; box-shadow: 0 0 0 3px rgba(99,102,241,0.2); }
+
+button {
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    border: none;
+}
+button:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(99,102,241,0.3); }
+
+/* 目录列表样式 */
+.file-list { list-style: none; padding: 0; }
+.file-item {
+    background: rgba(255,255,255,0.5);
+    padding: 15px;
+    margin-bottom: 10px;
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition: 0.2s;
+}
+.file-item:hover { background: white; transform: scale(1.02); }
+.file-icon { margin-right: 10px; font-size: 1.2rem; }
+
+/* PDF 查看器 */
+#pdf-wrapper { position: relative; max-height: 80vh; overflow-y: auto; background: #525659; border-radius: 12px; padding: 20px; display: none; }
+canvas { max-width: 100%; display: block; margin: 0 auto 20px auto; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+.watermark { 
+    position: absolute; top:0; left:0; width:100%; height:100%; 
+    pointer-events: none; overflow: hidden; z-index: 10;
+    display: flex; flex-wrap: wrap; opacity: 0.1;
+}
+.wm-text { transform: rotate(-30deg); margin: 60px; font-size: 20px; font-weight: bold; }
+.overlay { position: absolute; top:0; left:0; width:100%; height:100%; z-index: 20; }

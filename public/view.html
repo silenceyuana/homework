@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>文件阅览</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';</script>
+</head>
+<body>
+    <div class="container">
+        
+        <!-- 步骤1: 验证码 -->
+        <div id="auth-step" class="glass-card" style="max-width:400px; margin:0 auto;">
+            <h2>身份验证</h2>
+            <input type="text" id="code" placeholder="请输入激活码">
+            <button onclick="doVerify()">验证进入</button>
+        </div>
+
+        <!-- 步骤2: 文件目录 -->
+        <div id="list-step" class="glass-card" style="display:none;">
+            <div style="display:flex; justify-content:space-between;">
+                <h2>文件列表</h2>
+                <button onclick="logout()" style="width:auto; padding:5px 15px; font-size:12px; height:30px; background:#ef4444;">退出</button>
+            </div>
+            <ul id="file-ul" class="file-list"></ul>
+        </div>
+
+        <!-- 步骤3: PDF 阅读器 -->
+        <div id="reader-step" class="glass-card" style="display:none; padding:10px;">
+            <button onclick="backToList()" style="margin-bottom:10px; background:#6b7280;">&larr; 返回目录</button>
+            <div id="pdf-wrapper">
+                <div id="canvases"></div>
+                <div id="watermarks" class="watermark"></div>
+                <div class="overlay" oncontextmenu="return false;"></div> <!-- 阻挡右键 -->
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let currentCode = '';
+
+        async function doVerify() {
+            const code = document.getElementById('code').value;
+            const res = await fetch(`/api/verify?code=${code}`);
+            const data = await res.json();
+            
+            if (data.valid) {
+                currentCode = code;
+                document.getElementById('auth-step').style.display = 'none';
+                loadFileList();
+            } else {
+                alert('激活码无效或已过期');
+            }
+        }
+
+        async function loadFileList() {
+            // 通过 API 获取文件列表 (代理 PHP)
+            const res = await fetch(`/api/file-proxy?action=list&code=${currentCode}`);
+            if(!res.ok) return alert('无法加载目录');
+            
+            const files = await res.json();
+            const ul = document.getElementById('file-ul');
+            ul.innerHTML = '';
+            
+            files.forEach(file => {
+                const li = document.createElement('li');
+                li.className = 'file-item';
+                li.innerHTML = `<span class="file-icon">📄</span> ${file}`;
+                li.onclick = () => openFile(file);
+                ul.appendChild(li);
+            });
+            
+            document.getElementById('list-step').style.display = 'block';
+        }
+
+        async function openFile(filename) {
+            document.getElementById('list-step').style.display = 'none';
+            document.getElementById('reader-step').style.display = 'block';
+            document.getElementById('canvases').innerHTML = '正在加载安全文档...';
+            
+            // 请求文件流
+            const url = `/api/file-proxy?action=get&file=${filename}&code=${currentCode}`;
+            
+            try {
+                const loadingTask = pdfjsLib.getDocument(url);
+                const pdf = await loadingTask.promise;
+                document.getElementById('canvases').innerHTML = '';
+
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const viewport = page.getViewport({ scale: 1.5 });
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    await page.render({canvasContext: context, viewport: viewport}).promise;
+                    document.getElementById('canvases').appendChild(canvas);
+                }
+                
+                // 加水印
+                addWatermark();
+            } catch(e) {
+                alert('加载失败');
+                backToList();
+            }
+        }
+
+        function addWatermark() {
+            const container = document.getElementById('watermarks');
+            container.innerHTML = '';
+            for(let i=0; i<30; i++) {
+                const div = document.createElement('div');
+                div.className = 'wm-text';
+                div.innerText = `机密 - ${currentCode} - ${new Date().toLocaleDateString()}`;
+                container.appendChild(div);
+            }
+        }
+
+        function backToList() {
+            document.getElementById('reader-step').style.display = 'none';
+            document.getElementById('list-step').style.display = 'block';
+        }
+        
+        function logout() { location.reload(); }
+
+        // 屏蔽按键
+        document.onkeydown = function(e) {
+            if(e.keyCode == 123 || (e.ctrlKey && (e.key === 'p' || e.key === 's'))) return false;
+        }
+    </script>
+</body>
+</html>
+
+<script>
+    // 动态加载背景图：尝试 /api/bing-bg，失败则回退到渐变
+    (function(){
+        const img = new Image();
+        img.onload = function(){
+            document.body.style.background = "linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.2)), url('/api/bing-bg') center/cover no-repeat fixed";
+        };
+        img.onerror = function(){
+            document.body.style.background = 'linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(236,72,153,0.15) 100%)';
+        };
+        img.src = '/api/bing-bg';
+    })();
+</script>

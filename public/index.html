@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件中心</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- 预先建立连接，加快 API 响应 -->
+<link rel="preconnect" href="https://www.bing.com">
+<!-- 尝试预加载背景图 (浏览器支持程度不同，不一定完全生效，但有好处) -->
+<link rel="preload" as="image" href="/api/bing-bg">
+
+</head>
+<body>
+    <div class="container">
+        <div class="glass-card">
+            <h1>📑 寒假作业查询</h1>
+            <p style="text-align:center; color:#666; margin-bottom:30px;">
+                在这里获取您的寒假作业的免费答案<br>请申请权限或直接验证查看。
+            </p>
+            <button onclick="location.href='apply.html'">申请查阅权限</button>
+            <button onclick="location.href='view.html'" style="background:white; color:#6366f1; border:1px solid #ddd;">已有激活码</button>
+        </div>
+    </div>
+</body>
+</html>
+
+<script>
+    // 动态加载背景图：尝试 /api/bing-bg，失败则回退到渐变
+    (function(){
+        const img = new Image();
+        img.onload = function(){
+            document.body.style.background = "linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.2)), url('/api/bing-bg') center/cover no-repeat fixed";
+        };
+        img.onerror = function(){
+            document.body.style.background = 'linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(236,72,153,0.15) 100%)';
+        };
+        img.src = '/api/bing-bg';
+    })();
+</script>

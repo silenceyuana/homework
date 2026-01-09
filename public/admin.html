@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>管理后台</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+    <!-- 预先建立连接，加快 API 响应 -->
+<link rel="preconnect" href="https://www.bing.com">
+<!-- 尝试预加载背景图 (浏览器支持程度不同，不一定完全生效，但有好处) -->
+<link rel="preload" as="image" href="/api/bing-bg">
+    <style>
+        /* 增加一些后台特有的样式 */
+        .status-badge { padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: bold; }
+        .status-pending { background: #fef3c7; color: #d97706; }
+        .status-approved { background: #d1fae5; color: #059669; }
+        .status-rejected { background: #fee2e2; color: #dc2626; }
+        .status-used { background: #e5e7eb; color: #6b7280; }
+        
+        .btn-approve { background: #10b981; padding: 6px 12px; font-size: 12px; width: auto; display: inline-block; margin-right: 5px; }
+        .btn-reject { background: #ef4444; padding: 6px 12px; font-size: 12px; width: auto; display: inline-block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 登录部分保持不变 -->
+        <div class="glass-card" id="login-box">
+            <h2>管理员登录</h2>
+            <input type="password" id="pwd" placeholder="输入管理密码">
+            <button onclick="login()">登录</button>
+        </div>
+
+        <!-- 数据列表部分 -->
+        <div class="glass-card" id="admin-box" style="display:none; max-width:1100px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:20px; align-items: center;">
+                <h2>申请审批列表</h2>
+                <button onclick="location.reload()" style="width:auto; background:#666; font-size: 14px; padding: 8px 16px;">刷新 / 退出</button>
+            </div>
+            <div style="overflow-x:auto;">
+                <table style="width:100%; text-align:left; border-collapse:collapse;">
+                    <thead>
+                        <tr style="border-bottom:2px solid rgba(0,0,0,0.05); color: #666;">
+                            <th style="padding:10px;">ID</th>
+                            <th>姓名</th>
+                            <th>邮箱</th>
+                            <th>状态</th>
+                            <th>拒绝原因/激活码</th>
+                            <th style="text-align:right;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="list"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let token = '';
+
+        async function login() {
+            const pwd = document.getElementById('pwd').value;
+            const res = await fetch('/api/login', {
+                method:'POST', 
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({password: pwd})
+            });
+            if(res.ok) {
+                const data = await res.json();
+                token = data.token;
+                document.getElementById('login-box').style.display = 'none';
+                document.getElementById('admin-box').style.display = 'block';
+                loadData();
+            } else {
+                alert('密码错误');
+            }
+        }
+
+        async function loadData() {
+            const res = await fetch('/api/admin-data', {
+                headers: { 'Authorization': token }
+            });
+            const data = await res.json();
+            const tbody = document.getElementById('list');
+            tbody.innerHTML = '';
+            
+            data.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.style.borderBottom = '1px solid rgba(0,0,0,0.05)';
+                
+                // 状态标签
+                let statusClass = `status-${item.status}`;
+                let infoText = item.activation_code || '-';
+                if(item.status === 'rejected') infoText = `<span style="color:#ef4444; font-size:12px;">${item.reject_reason || '无原因'}</span>`;
+
+                tr.innerHTML = `
+                    <td style="padding:15px 10px;">#${item.id}</td>
+                    <td>${item.name}</td>
+                    <td>${item.contact}</td>
+                    <td><span class="status-badge ${statusClass}">${item.status.toUpperCase()}</span></td>
+                    <td>${infoText}</td>
+                    <td style="text-align:right;">
+                        ${item.status === 'pending' ? `
+                            <button class="btn-approve" onclick="approve(${item.id})">通过</button>
+                            <button class="btn-reject" onclick="reject(${item.id})">拒绝</button>
+                        ` : '<span style="color:#aaa; font-size:12px;">已处理</span>'}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // 通过
+        async function approve(id) {
+            if(!confirm('确认通过该申请并发送激活码邮件？')) return;
+            
+            // UI 反馈
+            showLoading(true);
+
+            const res = await fetch('/api/approve', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json', 'Authorization': token},
+                body: JSON.stringify({id})
+            });
+            
+            showLoading(false);
+            
+            if(res.ok) { 
+                alert('✅ 已通过，邮件发送成功！'); 
+                loadData(); 
+            } else { 
+                alert('❌ 发送失败，请检查 Resend 配置或日志'); 
+            }
+        }
+
+        // 拒绝
+        async function reject(id) {
+            const reason = prompt("请输入拒绝原因 (将发送给用户):", "资料不完整，请补充后重新申请。");
+            if (reason === null) return; // 用户点击取消
+            if (reason.trim() === "") return alert("必须填写拒绝原因");
+
+            showLoading(true);
+
+            const res = await fetch('/api/reject', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json', 'Authorization': token},
+                body: JSON.stringify({ id, reason })
+            });
+
+            showLoading(false);
+
+            if(res.ok) { 
+                alert('🚫 已拒绝，通知邮件发送成功！'); 
+                loadData(); 
+            } else { 
+                alert('❌ 操作失败'); 
+            }
+        }
+
+        function showLoading(isLoading) {
+            // 简单的全局 loading 遮罩
+            if(isLoading) {
+                const div = document.createElement('div');
+                div.id = 'loading-mask';
+                div.style = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.5); z-index:999; display:flex; justify-content:center; align-items:center; backdrop-filter:blur(5px);';
+                div.innerHTML = '<div style="background:white; padding:20px; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,0.1);">邮件发送中...</div>';
+                document.body.appendChild(div);
+            } else {
+                const div = document.getElementById('loading-mask');
+                if(div) div.remove();
+            }
+        }
+    </script>
+    <script>
+        // 动态加载背景图：优先尝试从 /api/bing-bg 加载图片，失败则使用渐变作为回退
+        (function(){
+            const img = new Image();
+            img.onload = function(){
+                document.body.style.background = "linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.2)), url('/api/bing-bg') center/cover no-repeat fixed";
+            };
+            img.onerror = function(){
+                // 回退：仅渐变背景，确保在没有后端或打开为 file:// 时也有良好展示
+                document.body.style.background = 'linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(236,72,153,0.15) 100%)';
+            };
+            // 触发加载
+            img.src = '/api/bing-bg';
+        })();
+    </script>
+</body>
+</html>
