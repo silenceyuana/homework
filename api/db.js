@@ -6,7 +6,9 @@ const pool = mysql.createPool({
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
     waitForConnections: true,
-    connectionLimit: 10
+    connectionLimit: 5,  // 改成 5，免费数据库通常承受不了 10
+    queueLimit: 0,
+    ssl: { rejectUnauthorized: false } // 【重要】很多云数据库需要加这行才能连上！
 });
 
 module.exports = pool;
