@@ -1,13 +1,19 @@
 <!DOCTYPE html>
 <html>
+        <script>
+        // 配置你的后台域名 (不带 http)
+        const ADMIN_DOMAIN = 'admin.你的后台域名.com'; 
+        
+        // 如果当前访问的域名不是后台域名，且不是本地调试(localhost)，强制跳回主页
+        if (window.location.hostname !== ADMIN_DOMAIN && window.location.hostname !== 'localhost') {
+            window.location.href = '/';
+        }
+    </script>
 <head>
     <title>管理后台</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="style.css">
-    <!-- 预先建立连接，加快 API 响应 -->
-<link rel="preconnect" href="https://www.bing.com">
-<!-- 尝试预加载背景图 (浏览器支持程度不同，不一定完全生效，但有好处) -->
-<link rel="preload" as="image" href="/api/bing-bg">
+
     <style>
         /* 增加一些后台特有的样式 */
         .status-badge { padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: bold; }
@@ -170,6 +176,8 @@
         }
     </script>
     <script>
+
+
         // 动态加载背景图：优先尝试从 /api/bing-bg 加载图片，失败则使用渐变作为回退
         (function(){
             const img = new Image();

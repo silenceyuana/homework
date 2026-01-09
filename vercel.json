@@ -1,0 +1,14 @@
+{
+  "rewrites": [
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "admin.betteryuan.cn"
+        }
+      ],
+      "destination": "/admin.html"
+    }
+  ]
+}
