@@ -1,4 +1,4 @@
-import db from './db';
+import db from './db.js';
 import jwt from 'jsonwebtoken';
 import { Resend } from 'resend';
 
@@ -14,7 +14,7 @@ export default async function handler(req, res) {
             chars[Math.floor(Math.random() * chars.length)]
         ).join('');
 
-        const expires = new Date(Date.now() + 3 * 86400000);
+        const expires = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
 
         const [[app]] = await db.execute(
             'SELECT contact FROM applications WHERE id=?',

@@ -13,8 +13,8 @@ export default function handler(req, res) {
             process.env.JWT_SECRET,
             { expiresIn: '1h' }
         );
-        res.json({ token });
-    } else {
-        res.status(401).json({ error: 'Wrong password' });
+        return res.json({ token });
     }
+
+    res.status(401).json({ error: 'Wrong password' });
 }
