@@ -1,16 +1,16 @@
-const db = require('./db');
-const jwt = require('jsonwebtoken');
-const { Resend } = require('resend');
-const parseBody = require('./parseBody');
+import jwt from 'jsonwebtoken';
+import { Resend } from 'resend';
+import db from './db.js';
+import parseBody from './parseBody.js';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   try {
     // ===== JWT 校验 =====
     const auth = req.headers.authorization || '';
     if (!auth.startsWith('Bearer ')) {
-      throw new Error('Missing token');
+      return res.status(401).json({ error: 'Missing token' });
     }
 
     const token = auth.slice(7);
@@ -18,22 +18,20 @@ module.exports = async (req, res) => {
 
     // ===== 参数 =====
     const { id, reason } = await parseBody(req);
-    if (!id || !reason) throw new Error('Missing parameters');
+    if (!id || !reason) {
+      return res.status(400).json({ error: 'Missing parameters' });
+    }
 
     // ===== 查询用户 =====
     const [rows] = await db.execute(
       'SELECT contact FROM applications WHERE id=?',
       [id]
     );
-    if (!rows.length) throw new Error('User not found');
+    if (!rows.length) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
-    // ===== 更新状态 =====
-    await db.execute(
-      'UPDATE applications SET status="rejected", reject_reason=? WHERE id=?',
-      [reason, id]
-    );
-
-    // ===== 发送邮件 =====
+    // ===== 发送拒绝邮件（先发）=====
     await resend.emails.send({
       from: process.env.EMAIL_FROM,
       to: rows[0].contact,
@@ -45,10 +43,16 @@ module.exports = async (req, res) => {
       `
     });
 
-    res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ success: true }));
+    // ===== 邮件成功后再更新数据库 =====
+    await db.execute(
+      'UPDATE applications SET status="rejected", reject_reason=? WHERE id=?',
+      [reason, id]
+    );
+
+    return res.json({ success: true });
+
   } catch (e) {
-    res.statusCode = 401;
-    res.end(JSON.stringify({ error: e.message }));
+    console.error('REJECT ERROR:', e);
+    return res.status(500).json({ error: e.message });
   }
-};
+}
