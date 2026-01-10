@@ -1,20 +1,18 @@
-const db = require('./db');
-const jwt = require('jsonwebtoken');
-const { Resend } = require('resend');
-const parseBody = require('./parseBody');
+import db from './db';
+import jwt from 'jsonwebtoken';
+import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
     try {
-        jwt.verify(req.headers.authorization, 'SECRET_KEY_JWT');
-        const { id, reason } = await parseBody(req);
+        jwt.verify(req.headers.authorization, process.env.JWT_SECRET);
+        const { id, reason } = req.body;
 
-        const [rows] = await db.execute(
+        const [[app]] = await db.execute(
             'SELECT contact FROM applications WHERE id=?',
             [id]
         );
-        if (!rows.length) throw new Error('User not found');
 
         await db.execute(
             'UPDATE applications SET status="rejected", reject_reason=? WHERE id=?',
@@ -23,14 +21,13 @@ module.exports = async (req, res) => {
 
         await resend.emails.send({
             from: process.env.EMAIL_FROM,
-            to: rows[0].contact,
-            subject: '【审核未通过】文件查阅申请',
-            html: `<p>拒绝原因：${reason}</p>`
+            to: app.contact,
+            subject: '【审核未通过】申请结果',
+            html: `<p>原因：${reason}</p>`
         });
 
-        res.end(JSON.stringify({ success: true }));
+        res.json({ success: true });
     } catch (e) {
-        res.statusCode = 500;
-        res.end(JSON.stringify({ error: e.message }));
+        res.status(500).json({ error: e.message });
     }
-};
+}

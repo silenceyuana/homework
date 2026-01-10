@@ -1,24 +1,20 @@
-const db = require('./db');
-const parseBody = require('./parseBody');
+import db from './db';
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
     if (req.method !== 'POST') {
-        res.statusCode = 405;
-        return res.end();
+        return res.status(405).end();
     }
 
     try {
-        const { name, contact } = await parseBody(req);
+        const { name, contact } = req.body;
 
         await db.execute(
             'INSERT INTO applications (name, contact, status) VALUES (?, ?, "pending")',
             [name, contact]
         );
 
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ success: true }));
+        res.status(200).json({ success: true });
     } catch (e) {
-        res.statusCode = 500;
-        res.end(JSON.stringify({ error: e.message }));
+        res.status(500).json({ error: e.message });
     }
-};
+}

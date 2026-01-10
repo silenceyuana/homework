@@ -1,23 +1,20 @@
-const jwt = require('jsonwebtoken');
-const parseBody = require('./parseBody');
+import jwt from 'jsonwebtoken';
 
-module.exports = async (req, res) => {
-    try {
-        const { password } = await parseBody(req);
-
-        if (password === process.env.ADMIN_PASSWORD) {
-            const token = jwt.sign(
-                { role: 'admin' },
-                'SECRET_KEY_JWT',
-                { expiresIn: '1h' }
-            );
-            res.end(JSON.stringify({ token }));
-        } else {
-            res.statusCode = 401;
-            res.end(JSON.stringify({ error: 'Wrong password' }));
-        }
-    } catch (e) {
-        res.statusCode = 500;
-        res.end(JSON.stringify({ error: e.message }));
+export default function handler(req, res) {
+    if (req.method !== 'POST') {
+        return res.status(405).end();
     }
-};
+
+    const { password } = req.body;
+
+    if (password === process.env.ADMIN_PASSWORD) {
+        const token = jwt.sign(
+            { role: 'admin' },
+            process.env.JWT_SECRET,
+            { expiresIn: '1h' }
+        );
+        res.json({ token });
+    } else {
+        res.status(401).json({ error: 'Wrong password' });
+    }
+}
