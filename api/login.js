@@ -1,12 +1,23 @@
 const jwt = require('jsonwebtoken');
+const parseBody = require('./parseBody');
 
 module.exports = async (req, res) => {
-    const { password } = req.body;
-    // 简单起见，管理员密码放在环境变量 ADMIN_PASSWORD
-    if(password === process.env.ADMIN_PASSWORD) {
-        const token = jwt.sign({role: 'admin'}, 'SECRET_KEY_JWT', {expiresIn: '1h'});
-        res.json({token});
-    } else {
-        res.status(401).json({error: 'Wrong password'});
+    try {
+        const { password } = await parseBody(req);
+
+        if (password === process.env.ADMIN_PASSWORD) {
+            const token = jwt.sign(
+                { role: 'admin' },
+                'SECRET_KEY_JWT',
+                { expiresIn: '1h' }
+            );
+            res.end(JSON.stringify({ token }));
+        } else {
+            res.statusCode = 401;
+            res.end(JSON.stringify({ error: 'Wrong password' }));
+        }
+    } catch (e) {
+        res.statusCode = 500;
+        res.end(JSON.stringify({ error: e.message }));
     }
 };

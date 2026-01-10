@@ -2,10 +2,17 @@ const db = require('./db');
 const jwt = require('jsonwebtoken');
 
 module.exports = async (req, res) => {
-    const token = req.headers.authorization;
     try {
-        jwt.verify(token, 'SECRET_KEY_JWT'); // 验证 Token
-        const [rows] = await db.execute('SELECT * FROM applications ORDER BY id DESC');
-        res.json(rows);
-    } catch(e) { res.status(401).json({error: 'Unauthorized'}); }
+        jwt.verify(req.headers.authorization, 'SECRET_KEY_JWT');
+
+        const [rows] = await db.execute(
+            'SELECT id, name, contact, status, reject_reason, activation_code FROM applications ORDER BY id DESC'
+        );
+
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify(rows));
+    } catch (e) {
+        res.statusCode = 401;
+        res.end(JSON.stringify({ error: 'Unauthorized' }));
+    }
 };
