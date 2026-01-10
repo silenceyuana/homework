@@ -10,14 +10,14 @@
 <body>
     <div class="container">
         
-        <!-- 步骤1: 验证码 -->
+
         <div id="auth-step" class="glass-card" style="max-width:400px; margin:0 auto;">
             <h2>身份验证</h2>
             <input type="text" id="code" placeholder="请输入激活码">
             <button onclick="doVerify()">验证进入</button>
         </div>
 
-        <!-- 步骤2: 文件目录 -->
+
         <div id="list-step" class="glass-card" style="display:none;">
             <div style="display:flex; justify-content:space-between;">
                 <h2>文件列表</h2>
@@ -26,7 +26,7 @@
             <ul id="file-ul" class="file-list"></ul>
         </div>
 
-        <!-- 步骤3: PDF 阅读器 -->
+     
         <div id="reader-step" class="glass-card" style="display:none; padding:10px;">
             <button onclick="backToList()" style="margin-bottom:10px; background:#6b7280;">&larr; 返回目录</button>
             <div id="pdf-wrapper">
@@ -56,7 +56,7 @@
         }
 
         async function loadFileList() {
-            // 通过 API 获取文件列表 (代理 PHP)
+
             const res = await fetch(`/api/file-proxy?action=list&code=${currentCode}`);
             if(!res.ok) return alert('无法加载目录');
             

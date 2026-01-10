@@ -1,116 +1,75 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
+import { getDb } from './db.js';
 
-/**
- * Google 风格邮件模板
- */
-function renderMailTemplate({ title, message, color, icon }) {
-    return `
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-    body {
-        margin: 0;
-        padding: 0;
-        background: #f1f3f4;
-        font-family: Roboto, Arial, sans-serif;
-    }
-    .card {
-        max-width: 420px;
-        margin: 40px auto;
-        background: #ffffff;
-        border-radius: 8px;
-        box-shadow: 0 1px 2px rgba(0,0,0,.1),
-                    0 2px 6px rgba(0,0,0,.08);
-        padding: 28px;
-    }
-    .icon {
-        width: 48px;
-        height: 48px;
-        border-radius: 50%;
-        background: ${color};
-        color: #fff;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 22px;
-        margin-bottom: 16px;
-    }
-    h2 {
-        margin: 0;
-        font-size: 20px;
-        font-weight: 500;
-        color: #202124;
-    }
-    p {
-        font-size: 14px;
-        color: #5f6368;
-        line-height: 1.6;
-        margin-top: 12px;
-    }
-    .footer {
-        margin-top: 24px;
-        font-size: 12px;
-        color: #9aa0a6;
-    }
-</style>
-</head>
-<body>
-    <div class="card">
-        <div class="icon">${icon}</div>
-        <h2>${title}</h2>
-        <p>${message}</p>
-        <div class="footer">
-            本邮件由系统自动发送，请勿回复
-        </div>
-    </div>
-</body>
-</html>
-`;
-}
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export default async function handler(req, res) {
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method Not Allowed' });
-    }
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
-    try {
-        const { email, username, reason } = req.body;
+  const { id, reason } = req.body || {};
+  if (!id) {
+    return res.status(400).json({ error: 'Missing id' });
+  }
 
-        if (!email || !username) {
-            return res.status(400).json({ error: 'Missing parameters' });
-        }
+  const rejectReason = reason || '资料不完整，请补充后重新提交申请';
 
-        const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST,
-            port: Number(process.env.SMTP_PORT || 465),
-            secure: true,
-            auth: {
-                user: process.env.SMTP_USER,
-                pass: process.env.SMTP_PASS
-            }
-        });
+  const db = getDb();
 
-        const html = renderMailTemplate({
-            title: '申请未通过',
-            message: `你好 <b>${username}</b>，很遗憾你的申请未通过审核。<br><br>
-            原因：${reason || '不符合当前申请条件'}`,
-            color: '#d93025',
-            icon: '✖'
-        });
+  // 1️⃣ 查询记录
+  const row = db
+    .prepare('SELECT * FROM applications WHERE id = ?')
+    .get(id);
 
-        await transporter.sendMail({
-            from: `"系统通知" <${process.env.SMTP_USER}>`,
-            to: email,
-            subject: '申请结果通知',
-            html
-        });
+  if (!row) {
+    return res.status(404).json({ error: 'Application not found' });
+  }
 
-        res.json({ success: true });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Reject failed' });
-    }
+  if (row.status !== 'PENDING') {
+    return res.status(400).json({ error: 'Already processed' });
+  }
+
+  // 2️⃣ 更新数据库
+  db.prepare(`
+    UPDATE applications
+    SET status = 'REJECTED',
+        reason = ?,
+        processed_at = datetime('now')
+    WHERE id = ?
+  `).run(rejectReason, id);
+
+  // 3️⃣ 发送拒绝邮件
+  await resend.emails.send({
+    from: 'BetterYuan <no-reply@betteryuan.cn>',
+    to: row.email,
+    subject: '您的申请未通过审核',
+    html: `
+      <div style="font-family:Arial,Helvetica,sans-serif;background:#f6f8fa;padding:40px">
+        <div style="max-width:520px;margin:auto;background:#fff;border-radius:12px;padding:32px">
+          <h2 style="margin-top:0;color:#d93025">申请未通过</h2>
+          <p>您好 <b>${row.name || '用户'}</b>，</p>
+          <p>很遗憾，您的申请未通过审核，原因如下：</p>
+          <div style="
+            margin:24px 0;
+            padding:16px;
+            background:#fce8e6;
+            border-radius:8px;
+            color:#a50e0e;
+          ">
+            ${rejectReason}
+          </div>
+          <p style="color:#666;font-size:14px">
+            您可以根据提示修改后重新提交申请。
+          </p>
+          <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
+          <p style="color:#999;font-size:12px">
+            本邮件由系统自动发送，请勿回复
+          </p>
+        </div>
+      </div>
+    `
+  });
+
+  return res.json({ success: true });
 }

@@ -1,115 +1,87 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
+import { getDb } from './db.js';
 
-/**
- * Google 风格邮件模板
- */
-function renderMailTemplate({ title, message, color, icon }) {
-    return `
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-    body {
-        margin: 0;
-        padding: 0;
-        background: #f1f3f4;
-        font-family: Roboto, Arial, sans-serif;
-    }
-    .card {
-        max-width: 420px;
-        margin: 40px auto;
-        background: #ffffff;
-        border-radius: 8px;
-        box-shadow: 0 1px 2px rgba(0,0,0,.1),
-                    0 2px 6px rgba(0,0,0,.08);
-        padding: 28px;
-    }
-    .icon {
-        width: 48px;
-        height: 48px;
-        border-radius: 50%;
-        background: ${color};
-        color: #fff;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 22px;
-        margin-bottom: 16px;
-    }
-    h2 {
-        margin: 0;
-        font-size: 20px;
-        font-weight: 500;
-        color: #202124;
-    }
-    p {
-        font-size: 14px;
-        color: #5f6368;
-        line-height: 1.6;
-        margin-top: 12px;
-    }
-    .footer {
-        margin-top: 24px;
-        font-size: 12px;
-        color: #9aa0a6;
-    }
-</style>
-</head>
-<body>
-    <div class="card">
-        <div class="icon">${icon}</div>
-        <h2>${title}</h2>
-        <p>${message}</p>
-        <div class="footer">
-            本邮件由系统自动发送，请勿回复
-        </div>
-    </div>
-</body>
-</html>
-`;
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+function generateCode(length = 16) {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return result;
 }
 
 export default async function handler(req, res) {
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method Not Allowed' });
-    }
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
-    try {
-        const { email, username } = req.body;
+  const { id } = req.body || {};
+  if (!id) {
+    return res.status(400).json({ error: 'Missing id' });
+  }
 
-        if (!email || !username) {
-            return res.status(400).json({ error: 'Missing parameters' });
-        }
+  const db = getDb();
 
-        const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST,
-            port: Number(process.env.SMTP_PORT || 465),
-            secure: true,
-            auth: {
-                user: process.env.SMTP_USER,
-                pass: process.env.SMTP_PASS
-            }
-        });
+  // 1️⃣ 查询申请记录
+  const row = db
+    .prepare('SELECT * FROM applications WHERE id = ?')
+    .get(id);
 
-        const html = renderMailTemplate({
-            title: '申请已通过',
-            message: `你好 <b>${username}</b>，你的申请已通过审核，现在可以正常使用相关服务。`,
-            color: '#188038',
-            icon: '✔'
-        });
+  if (!row) {
+    return res.status(404).json({ error: 'Application not found' });
+  }
 
-        await transporter.sendMail({
-            from: `"系统通知" <${process.env.SMTP_USER}>`,
-            to: email,
-            subject: '申请通过通知',
-            html
-        });
+  if (row.status !== 'PENDING') {
+    return res.status(400).json({ error: 'Already processed' });
+  }
 
-        res.json({ success: true });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Approve failed' });
-    }
+  // 2️⃣ 生成激活码
+  const code = generateCode();
+
+  // 3️⃣ 更新数据库
+  db.prepare(`
+    UPDATE applications
+    SET status = 'APPROVED',
+        code = ?,
+        processed_at = datetime('now')
+    WHERE id = ?
+  `).run(code, id);
+
+  // 4️⃣ 发送通过邮件（内嵌 UI）
+  await resend.emails.send({
+    from: 'BetterYuan <no-reply@betteryuan.cn>',
+    to: row.email,
+    subject: '您的申请已通过',
+    html: `
+      <div style="font-family:Arial,Helvetica,sans-serif;background:#f6f8fa;padding:40px">
+        <div style="max-width:520px;margin:auto;background:#fff;border-radius:12px;padding:32px">
+          <h2 style="margin-top:0">申请已通过 🎉</h2>
+          <p>您好 <b>${row.name || '用户'}</b>，</p>
+          <p>您的申请已经通过审核，以下是您的激活码：</p>
+          <div style="
+            margin:24px 0;
+            padding:16px;
+            font-size:20px;
+            text-align:center;
+            background:#f1f3f4;
+            border-radius:8px;
+            letter-spacing:2px;
+          ">
+            ${code}
+          </div>
+          <p style="color:#666;font-size:14px">
+            请妥善保存该激活码，如有问题请联系管理员。
+          </p>
+          <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
+          <p style="color:#999;font-size:12px">
+            本邮件由系统自动发送，请勿回复
+          </p>
+        </div>
+      </div>
+    `
+  });
+
+  return res.json({ success: true, code });
 }
